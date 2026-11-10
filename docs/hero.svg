@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" role="img" aria-label="Terminal: git commit is blocked by Commit Guard with 3 masked hits, then git push passes">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a1408"/><stop offset="1" stop-color="#050505"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="400" rx="18" fill="url(#bg)"/>
+  <rect x="32" y="28" width="736" height="344" rx="12" fill="#0a0a0a" stroke="#2a2a2a"/>
+  <path d="M32 40 a12 12 0 0 1 12 -12 H756 a12 12 0 0 1 12 12 V64 H32 Z" fill="#161616"/>
+  <circle cx="54" cy="46" r="6" fill="#ff5a4e"/><circle cx="74" cy="46" r="6" fill="#f5b942"/><circle cx="94" cy="46" r="6" fill="#3a3a3a"/>
+  <text x="400" y="51" fill="#6b6b6b" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="13" text-anchor="middle">~/my-project</text>
+  <g font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-size="15" fill="#d0d0d0">
+    <text x="56" y="100"><tspan fill="#f5b942">$</tspan><tspan x="74">git commit -m "add settings page"</tspan></text>
+    <text x="56" y="130" fill="#ff5a4e" font-weight="700">commitguard: BLOCKED, 3 hit(s):</text>
+    <text y="156"><tspan x="74">src/config.py:14</tspan><tspan x="250">email</tspan><tspan x="430" fill="#ff5a4e">ja***</tspan></text>
+    <text y="182"><tspan x="74">src/paths.py:3</tspan><tspan x="250">windows-user-path</tspan><tspan x="430" fill="#ff5a4e">C:***</tspan></text>
+    <text y="208"><tspan x="74">README.md:9</tspan><tspan x="250">auto-country-hint</tspan><tspan x="430" fill="#ff5a4e">Te***</tspan></text>
+    <text x="56" y="236" fill="#7d7d7d">Fix it, or add 'commitguard:allow' to a line that is safe.</text>
+    <text x="56" y="286"><tspan fill="#f5b942">$</tspan><tspan x="74">git commit -m "add settings page"</tspan></text>
+    <text x="56" y="312" fill="#7d7d7d">[main 4f2a9c1] add settings page</text>
+    <text x="56" y="342"><tspan fill="#f5b942">$</tspan><tspan x="74">git push</tspan><tspan x="170" fill="#f5b942" font-weight="700">ok</tspan><tspan x="200" fill="#7d7d7d">name, email and timezone (+0000) clean</tspan></text>
+  </g>
+</svg>

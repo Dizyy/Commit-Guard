@@ -1,11 +1,89 @@
+<div align="center">
+
+<img src="docs/logo.svg" width="112" height="112" alt="Commit Guard logo: an amber shield around a commit line whose middle commit is masked in red">
+
 # Commit Guard
 
-Git hooks that stop commits and pushes that leak your personal data: your name, email,
-username, PC name, home folder paths, IP addresses, secrets, and hints about your country.
+### git commit, \*\*\*
 
-- Works in **every repo** on your machine with one command.
-- **No setup**: it detects who you are from the OS on every run. Nothing to type.
-- Python 3.11+, standard library only. No dependencies.
+Git hooks that stop commits and pushes that leak your name, email, home folder, IPs, secrets and country hints.<br>
+**One command guards every repo. Nothing to configure: it knows who you are.**
+
+<br>
+
+<a href="#install"><img src="https://img.shields.io/badge/Install_in_10_seconds-f5b942?style=for-the-badge&logo=git&logoColor=0e0e0e" alt="Install in 10 seconds" height="36"></a>
+&nbsp;
+<a href="#what-it-checks"><img src="https://img.shields.io/badge/What_it_checks-1f1f1f?style=for-the-badge" alt="What it checks" height="36"></a>
+
+<br>
+
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-1f1f1f?style=flat-square&logo=python&logoColor=white)](#install)
+[![No dependencies](https://img.shields.io/badge/dependencies-none-f5b942?style=flat-square)](#install)
+[![Windows](https://img.shields.io/badge/tested_on-Windows-1f1f1f?style=flat-square)](#tests)
+[![MIT License](https://img.shields.io/badge/license-MIT-1f1f1f?style=flat-square)](LICENSE)
+
+<br>
+
+<img src="docs/hero.svg" width="800" alt="Terminal: git commit is blocked by Commit Guard with 3 masked hits (an email, a Windows user path, a country hint), then git push passes">
+
+</div>
+
+<br>
+
+<table>
+<tr>
+<td width="33%" align="center" valign="top">
+
+**1. Clone**<br>
+<sub>Python 3.11+, no packages to install.</sub>
+
+</td>
+<td width="33%" align="center" valign="top">
+
+**2. `install --global`**<br>
+<sub>Every repo, every commit and push.</sub>
+
+</td>
+<td width="33%" align="center" valign="top">
+
+**3. Forget about it**<br>
+<sub>It only speaks up when you leak.</sub>
+
+</td>
+</tr>
+</table>
+
+> [!NOTE]
+> **Your data never leaves your PC.**
+> - **No network calls, no telemetry.** Commit Guard only runs `git` and reads your OS settings.
+> - **Nothing to leak.** Your name, email and PC name are read from the OS on each run and kept in memory only. There is no config file with your details in it.
+> - **Even the warning is masked.** Hits are printed as `ja***`, so a screenshot or CI log doesn't leak either.
+> - **You can check every line.** It's one Python file, standard library only.
+
+## What it catches
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+**Who you are**<br>
+<sub>Full name, account email, username, PC name. Detected, not typed.</sub>
+
+</td>
+<td width="33%" valign="top">
+
+**Where you are**<br>
+<sub>Home folder paths, IPs, country and language hints, non-UTC commit times.</sub>
+
+</td>
+<td width="33%" valign="top">
+
+**Secrets**<br>
+<sub>AWS, GitHub and API keys, private keys, <code>.env</code> lines and files.</sub>
+
+</td>
+</tr>
+</table>
 
 ## Install
 
@@ -28,7 +106,7 @@ Only one repo instead: run `python path/to/commitguard.py install` inside it.
 
 ## What it checks
 
-**On commit**: only the lines you add (`git diff --cached -U0`) plus the names of staged files.
+**On commit**: only the lines you add (`git diff --cached -U0`) plus the names of staged files.<br>
 **On push**: author and committer name + email of every commit being pushed, and the timezone
 (anything other than `+0000` is blocked, because offsets reveal where you live).
 
@@ -67,8 +145,6 @@ commitguard: BLOCKED, 1 hit(s):
 Fix it, or add 'commitguard:allow' to a line that is safe.
 ```
 
-Matched text is masked (first 2 characters + `***`) so the output itself does not leak.
-
 - A line that contains `commitguard:allow` is skipped.
 - Scan staged changes by hand: `python commitguard.py scan`
 
@@ -95,6 +171,7 @@ A broken config file blocks the commit (fail closed) instead of silently letting
 - `git commit --no-verify` skips all hooks.
 - Repos that set their own local `core.hooksPath` (for example husky) are not covered by `--global`.
 - Commit messages are not scanned.
+- Auto-detection is tested on Windows. On macOS and Linux it reads the account name and locale (best effort).
 - Possible false positives: SSH remote URLs (the `git` user at a host looks like an email) and
   four-part version numbers (they look like IPs). Use `commitguard:allow` or an `allow` entry.
 

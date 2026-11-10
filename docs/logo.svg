@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Commit Guard logo: a shield around a commit line whose middle commit is masked">
+  <rect width="512" height="512" rx="112" fill="#0e0e0e"/>
+  <path d="M256 82 L392 130 V246 C392 342 334 406 256 436 C178 406 120 342 120 246 V130 Z" fill="none" stroke="#f5b942" stroke-width="24" stroke-linejoin="round"/>
+  <line x1="256" y1="140" x2="256" y2="384" stroke="#f5b942" stroke-width="20" stroke-linecap="round"/>
+  <circle cx="256" cy="166" r="24" fill="#0e0e0e" stroke="#f5b942" stroke-width="18"/>
+  <circle cx="256" cy="360" r="24" fill="#0e0e0e" stroke="#f5b942" stroke-width="18"/>
+  <rect x="176" y="222" width="160" height="84" rx="16" fill="#ff5a4e"/>
+  <g stroke="#0e0e0e" stroke-width="7" stroke-linecap="round">
+    <g transform="translate(212 264)"><line x1="0" y1="-14" x2="0" y2="14"/><line x1="-12" y1="-7" x2="12" y2="7"/><line x1="-12" y1="7" x2="12" y2="-7"/></g>
+    <g transform="translate(256 264)"><line x1="0" y1="-14" x2="0" y2="14"/><line x1="-12" y1="-7" x2="12" y2="7"/><line x1="-12" y1="7" x2="12" y2="-7"/></g>
+    <g transform="translate(300 264)"><line x1="0" y1="-14" x2="0" y2="14"/><line x1="-12" y1="-7" x2="12" y2="7"/><line x1="-12" y1="7" x2="12" y2="-7"/></g>
+  </g>
+</svg>
