@@ -6,7 +6,8 @@
 
 ### git commit, \*\*\*
 
-Git hooks that stop commits and pushes that leak your name, email, home folder, IPs, secrets and country hints.<br>
+**Your git history is forever.** One push can publish your real name, your home folder, an API key,<br>
+or the timezone that tells the world where you live. Commit Guard stops it before it leaves your PC.<br>
 **One command guards every repo. Nothing to configure: it knows who you are.**
 
 <br>
@@ -17,6 +18,7 @@ Git hooks that stop commits and pushes that leak your name, email, home folder, 
 
 <br>
 
+[![Latest release](https://img.shields.io/github/v/release/Dizyy/Commit-Guard?style=flat-square&label=release&color=f5b942)](https://github.com/Dizyy/Commit-Guard/releases/latest)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-1f1f1f?style=flat-square&logo=python&logoColor=white)](#install)
 [![No dependencies](https://img.shields.io/badge/dependencies-none-f5b942?style=flat-square)](#install)
 [![Windows](https://img.shields.io/badge/tested_on-Windows-1f1f1f?style=flat-square)](#tests)
@@ -79,7 +81,7 @@ Git hooks that stop commits and pushes that leak your name, email, home folder, 
 <td width="33%" valign="top">
 
 **Secrets**<br>
-<sub>AWS, GitHub and API keys, private keys, <code>.env</code> lines and files.</sub>
+<sub>Anthropic, OpenAI, Gemini and other AI keys, GitHub/AWS/Stripe tokens, keys in <code>.mcp.json</code> and settings files, <code>.env</code> lines and files.</sub>
 
 </td>
 </tr>
@@ -120,8 +122,13 @@ Built-in rules:
 | `windows-user-path` | `C:\Users\<name>`, `/c/Users/<name>` |
 | `email` | any email, except `*@users.noreply.github.com` |
 | `ipv4` | any IPv4 except `127.0.0.1` and `0.0.0.0` |
-| `aws-access-key`, `github-token`, `sk-api-key`, `private-key` | common secret formats |
+| `sk-api-key` | Anthropic (`sk-ant-...`) and OpenAI (`sk-proj-...`) keys |
+| `google-api-key`, `huggingface-token`, `groq-key`, `xai-key`, `replicate-token` | other AI provider keys (Gemini, Hugging Face, Groq, xAI, Replicate) |
+| `aws-access-key`, `github-token`, `gitlab-token`, `npm-token`, `stripe-key`, `slack-token` | dev service tokens |
+| `private-key`, `bearer-token` | private key headers, `Authorization: Bearer ...` values |
+| `url-password` | passwords in URLs: `postgres://user:pass@host`, git remotes with a token (`${VARS}`, `<password>` and `***` pass) |
 | `env-secret` | `.env`-style `NAME=value` where NAME contains SECRET, TOKEN, PASSWORD or API_KEY |
+| `assigned-secret` | the same names given a quoted value in JSON, YAML or code: `"ANTHROPIC_API_KEY": "..."` in `.mcp.json` or a settings file, `api_key = "..."` |
 | `blocked-file-name` | `.env`, `*.pem`, `*.key`, `id_rsa`, `HANDOFF.md`, `private.toml` |
 
 Auto-detected on every run (kept in memory only, never written anywhere):

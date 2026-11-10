@@ -40,6 +40,25 @@ POSITIVE = [
     ("env-secret", "export STRIPE_SECRET='abcd1234efgh'"),  # commitguard:allow
     ("env-secret", "SLACK_TOKEN=xoxb-fake-value"),  # commitguard:allow
     ("env-secret", 'MY_API_KEY="fakefakefake" # comment'),  # commitguard:allow
+    ("google-api-key", "key = 'AIzaFAKEfake0123456789FAKEfake012345678'"),  # commitguard:allow
+    ("huggingface-token", "HF = 'hf_FAKEfake0123456789FAKEfake012345'"),  # commitguard:allow
+    ("groq-key", "gsk_FAKEfake0123456789FAKEfake0123456789FAKEfake"),  # commitguard:allow
+    ("xai-key", "xai-FAKEfake0123456789FAKEfake0123456789FAKEfake"),  # commitguard:allow
+    ("replicate-token", "r8_FAKEfake0123456789FAKEfake0123456"),  # commitguard:allow
+    ("stripe-key", "stripe.api_key = 'sk_live_FAKEfake0123456789FAKE'"),  # commitguard:allow
+    ("slack-token", "SLACK = 'xoxb-0123456789-FAKEfakeFAKE'"),  # commitguard:allow
+    ("gitlab-token", "glpat-FAKEfake0123456789FAKE"),  # commitguard:allow
+    ("npm-token", "//registry.npmjs.org/:_authToken=npm_FAKEfake0123456789FAKEfake0123456789"),  # commitguard:allow
+    ("bearer-token", 'headers = {"Authorization": "Bearer FAKEfake0123456789FAKEfake"}'),  # commitguard:allow
+    ("assigned-secret", '"ANTHROPIC_API_KEY": "fake0123456789fake0123"'),  # commitguard:allow
+    ("assigned-secret", '"GITHUB_PERSONAL_ACCESS_TOKEN": "fake0123456789fakeABC"'),  # commitguard:allow
+    ("assigned-secret", 'api_key = "fake0123456789fake0123"'),  # commitguard:allow
+    ("assigned-secret", "client_secret: 'fake0123456789fake0123'"),  # commitguard:allow
+    ("assigned-secret", 'const apiKey = "fake0123456789fake0123";'),  # commitguard:allow
+    ("url-password", 'DB = "postgres://app:Fak3Pass@db.example.org:5432/app"'),  # commitguard:allow
+    ("url-password", "mongodb+srv://admin:Fake9word@cluster0.example.net/test"),  # commitguard:allow
+    ("url-password", "git remote add origin https://jt:faketoken99@git.example.com/r.git"),  # commitguard:allow
+    ("url-password", "REDIS_URL=redis://:Fak3Redis@cache.example.org:6379"),  # commitguard:allow
     ("private-name", "Written by Jane Testperson"),  # commitguard:allow
     ("private-name", "author: jane testperson"),  # commitguard:allow
     ("private-email", "mail jane.private@example.org"),  # commitguard:allow
@@ -101,6 +120,22 @@ See [the docs](https://example.org/docs/guide) for details.
 |--------|-------|
 | port   | 8080  |
 Release v2.10.0 on 2026-11-10.
+{"mcpServers": {"github": {"env": {"GITHUB_TOKEN": "${GITHUB_TOKEN}"}}}}
+"apiKey": "<your-api-key-here>",
+api_key: "your-api-key-goes-here"
+"token_type": "bearer",
+"token_uri": "https://oauth2.example.org/v4/token",
+DATABASE_URL = "postgres://app:${DB_PASSWORD}@db/app"
+url = "postgres://user:password@localhost/mydb"
+REDIS = "redis://:<password>@cache:6379"
+MYSQL = "mysql://root@localhost/db"
+log("connecting to postgres://app:***@db/app")
+See https://docs.example.org:443/guide#setup for details.
+"secret_name": "prod/database/password",
+password_hash = "pbkdf2_sha256"
+const token = process.env.TOKEN ?? "";
+headers["Authorization"] = f"Bearer {token}"
+Use a Bearer token from the dashboard.
 '''
 
 

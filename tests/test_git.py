@@ -125,6 +125,11 @@ class GitRepoTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertLess(elapsed, 1.0)
 
+    def test_version(self):
+        r = self.cg("--version")
+        self.assertEqual(r.returncode, 0)
+        self.assertRegex(r.stdout.strip(), r"^commitguard \d+\.\d+\.\d+$")
+
     def test_test_config_masks(self):
         r = self.cg("test-config")
         self.assertEqual(r.returncode, 0)

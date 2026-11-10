@@ -10,6 +10,7 @@ Usage:
                                       remove the global core.hooksPath again
   python commitguard.py scan          scan staged changes (what the pre-commit hook runs)
   python commitguard.py test-config   show which private patterns loaded (masked)
+  python commitguard.py --version     print the version
 
 Your name, account email, username, PC name and country/language hints are detected
 from the OS on every run (memory only). Optional extras: ~/.commitguard/private.toml.
@@ -26,6 +27,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterator
 
+__version__ = "1.0.0"
 ALLOW_MARKER = "commitguard:allow"
 HOOK_TAG = "# installed by commitguard"
 PRIVATE_KEYS = {  # config key -> rule name
@@ -91,6 +93,16 @@ def _ip_ok(s: str, cfg: Config) -> bool:
     return s in ("127.0.0.1", "0.0.0.0") or (cfg.allow_private_ips and s.startswith("192.168."))
 
 
+_PLACEHOLDER_PASSWORDS = {"password", "pass", "passwd", "pwd", "secret", "changeme", "xxx", "..."}
+
+
+def _url_password_ok(s: str) -> bool:
+    """Placeholders like ${DB_PASS}, <password>, ***, or the word 'password' are fine."""
+    pw = s.split("://", 1)[1].rsplit("@", 1)[0].split(":", 1)[1]
+    return (pw[0] in "$<{*%[" or pw.lower() in _PLACEHOLDER_PASSWORDS
+            or set(pw) <= set("*x.") or len(pw) < 3)
+
+
 BUILTIN_RULES = [
     Rule("windows-user-path", re.compile(r"\b[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s'\"`<>|:*?]+", re.I)),
     Rule("windows-user-path", re.compile(r"(?<![\w.])/[A-Za-z]/Users/[^/\s'\"`<>|:*?]+", re.I)),
@@ -104,6 +116,28 @@ BUILTIN_RULES = [
     Rule("env-secret", re.compile(
         r"^\s*(?:export\s+)?[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|APIKEY)[A-Z0-9_]*"
         r"=(['\"]?)[^\s'\"$<>(){}\[\]]{4,}\1\s*(?:#.*)?$")),
+    # Keys by provider prefix (AI providers and common dev services).
+    Rule("google-api-key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}")),
+    Rule("huggingface-token", re.compile(r"\bhf_[A-Za-z0-9]{30,}")),
+    Rule("groq-key", re.compile(r"\bgsk_[A-Za-z0-9]{40,}")),
+    Rule("xai-key", re.compile(r"\bxai-[A-Za-z0-9]{40,}")),
+    Rule("replicate-token", re.compile(r"\br8_[A-Za-z0-9]{30,}")),
+    Rule("stripe-key", re.compile(r"\b(?:sk|rk)_live_[A-Za-z0-9]{20,}")),
+    Rule("slack-token", re.compile(r"\bxox[abposr]-[A-Za-z0-9-]{10,}")),
+    Rule("gitlab-token", re.compile(r"\bglpat-[A-Za-z0-9_-]{20,}")),
+    Rule("npm-token", re.compile(r"\bnpm_[A-Za-z0-9]{36}")),
+    Rule("bearer-token", re.compile(r"\bBearer\s+[A-Za-z0-9._~+/-]{20,}=*")),
+    # scheme://user:password@host (database URLs, git remotes with a token in them).
+    Rule("url-password", re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://[^\s/:@'\"<>]*:([^\s/@'\"<>]+)@[\w.-]+"),
+         lambda s, c: _url_password_ok(s)),
+    # A secret-looking name assigned a quoted literal: JSON (.mcp.json, settings files), YAML,
+    # code. The value must be 16+ chars with a letter and a digit and no spaces, so variables,
+    # ${VARS}, <placeholders> and "your-key-here" texts pass.
+    Rule("assigned-secret", re.compile(
+        r"(?i)[\w.-]*(?:secret|token|passw(?:or)?d|api[_-]?key|access[_-]?key|auth[_-]?key)"
+        r"[\w.-]*[\"']?\s*[:=]\s*([\"'])(?![A-Za-z][\w+.-]*://)"  # URLs (token_uri) are fine
+        r"(?=[^\"'\s]*\d)(?=[^\"'\s]*[A-Za-z])"
+        r"[^\s'\"<>${}()\[\]]{16,}\1")),
 ]
 
 
@@ -606,6 +640,9 @@ def main(argv: list[str]) -> int:
             return cmd_install_global() if "--global" in argv else cmd_install()
         if cmd == "uninstall" and "--global" in argv:
             return cmd_uninstall_global()
+        if cmd in ("--version", "version"):
+            print(f"commitguard {__version__}")
+            return 0
         if cmd == "test-config":
             return cmd_test_config()
         if cmd in ("scan", "hook-pre-commit"):
