@@ -3,6 +3,11 @@
 
 Usage:
   python commitguard.py install       write pre-commit + pre-push hooks into this repo
+  python commitguard.py install --global
+                                      guard EVERY repo (sets global core.hooksPath;
+                                      each repo's own .git/hooks still run after it)
+  python commitguard.py uninstall --global
+                                      remove the global core.hooksPath again
   python commitguard.py scan          scan staged changes (what the pre-commit hook runs)
   python commitguard.py test-config   show which private patterns loaded (masked)
 
@@ -259,7 +264,10 @@ def cmd_install() -> int:
     except RuntimeError:
         print("commitguard: not inside a git repository", file=sys.stderr)
         return 1
-    py = Path(sys.executable).as_posix()
+    if hooks.resolve() == global_hooks_dir().resolve():
+        print("commitguard: global install is active; this repo is already guarded")
+        return 0
+    py =Path(sys.executable).as_posix()
     me = Path(__file__).resolve().as_posix()
     hooks.mkdir(parents=True, exist_ok=True)
     plan = {"pre-commit": "hook-pre-commit", "pre-push": 'hook-pre-push "$@"'}
@@ -274,11 +282,85 @@ def cmd_install() -> int:
                      encoding="utf-8", newline="\n")
         f.chmod(0o755)
         print(f"installed {f}")
+    _ensure_template()
+    return 0
+
+
+def _ensure_template() -> None:
     cp = config_path()
     if not cp.exists():
         cp.parent.mkdir(parents=True, exist_ok=True)
         cp.write_text(TEMPLATE, encoding="utf-8")
         print(f"created empty private config template: {cp}")
+
+
+# Client-side hooks git may run. In global mode every one of them chains to the repo's
+# own .git/hooks/<name>, so tools like git-lfs keep working. (reference-transaction is
+# left out on purpose: it fires on every ref update and nothing common uses it.)
+GLOBAL_HOOKS = ["applypatch-msg", "pre-applypatch", "post-applypatch", "pre-commit",
+                "pre-merge-commit", "prepare-commit-msg", "commit-msg", "post-commit",
+                "pre-rebase", "post-checkout", "post-merge", "pre-push", "post-rewrite",
+                "push-to-checkout", "pre-auto-gc"]
+
+
+def global_hooks_dir() -> Path:
+    return config_path().parent / "hooks"
+
+
+def global_hook_script(name: str, py: str, me: str) -> str:
+    head = f"#!/bin/sh\n{HOOK_TAG}\n"
+    chain = (f'cg_local="$(git rev-parse --git-common-dir)/hooks/{name}"\n'
+             f'if [ -x "$cg_local" ] && ! grep -q "{HOOK_TAG}" "$cg_local"; then\n')
+    if name == "pre-commit":
+        return (head + f'"{py}" "{me}" hook-pre-commit || exit 1\n'
+                + chain + '  exec "$cg_local" "$@"\nfi\nexit 0\n')
+    if name == "pre-push":  # stdin (the ref list) must reach both commitguard and the local hook
+        return (head + 'cg_in="$(cat)"\n'
+                "cg_feed() { if [ -n \"$cg_in\" ]; then printf '%s\\n' \"$cg_in\"; fi; }\n"
+                f'cg_feed | "{py}" "{me}" hook-pre-push "$@" || exit 1\n'
+                + chain + '  cg_feed | "$cg_local" "$@"\n  exit $?\nfi\nexit 0\n')
+    return head + chain + '  exec "$cg_local" "$@"\nfi\nexit 0\n'
+
+
+def _global_hooks_path() -> str:
+    r = subprocess.run(["git", "config", "--global", "--get", "core.hooksPath"],
+                       capture_output=True, text=True)
+    return r.stdout.strip()
+
+
+def _is_ours(p: str) -> bool:
+    return bool(p) and Path(p).expanduser().resolve() == global_hooks_dir().resolve()
+
+
+def cmd_install_global() -> int:
+    cur = _global_hooks_path()
+    if cur and not _is_ours(cur):
+        print(f"commitguard: global core.hooksPath is already {cur}; not changing it",
+              file=sys.stderr)
+        return 1
+    hooks = global_hooks_dir()
+    hooks.mkdir(parents=True, exist_ok=True)
+    py = Path(sys.executable).as_posix()
+    me = Path(__file__).resolve().as_posix()
+    for name in GLOBAL_HOOKS:
+        f = hooks / name
+        f.write_text(global_hook_script(name, py, me), encoding="utf-8", newline="\n")
+        f.chmod(0o755)
+    subprocess.run(["git", "config", "--global", "core.hooksPath", hooks.as_posix()], check=True)
+    print(f"installed {len(GLOBAL_HOOKS)} hooks in {hooks}")
+    print(f"set: git config --global core.hooksPath {hooks.as_posix()}")
+    print("Repos with their own local core.hooksPath (e.g. husky) are NOT covered.")
+    _ensure_template()
+    return 0
+
+
+def cmd_uninstall_global() -> int:
+    cur = _global_hooks_path()
+    if not _is_ours(cur):
+        print("commitguard: global core.hooksPath is not set to commitguard; nothing to do")
+        return 0
+    subprocess.run(["git", "config", "--global", "--unset", "core.hooksPath"], check=True)
+    print("removed global core.hooksPath (hook files left in place)")
     return 0
 
 
@@ -303,7 +385,9 @@ def main(argv: list[str]) -> int:
     cmd = argv[0] if argv else ""
     try:
         if cmd == "install":
-            return cmd_install()
+            return cmd_install_global() if "--global" in argv else cmd_install()
+        if cmd == "uninstall" and "--global" in argv:
+            return cmd_uninstall_global()
         if cmd == "test-config":
             return cmd_test_config()
         if cmd in ("scan", "hook-pre-commit"):
