@@ -113,7 +113,8 @@ the commit message.<br>
 **On push**: every commit that isn't on the remote yet: author and committer name + email, the
 timezone (anything other than `+0000` is blocked, because offsets reveal where you live), and
 again the added lines, file names and message. That catches commits made with `--no-verify` or
-before Commit Guard was installed.
+before Commit Guard was installed. Annotated tags get the same check for their tagger name,
+email, timezone and message.
 
 Built-in rules:
 

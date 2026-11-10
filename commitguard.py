@@ -417,9 +417,11 @@ def scan_push(lines: list[str], cfg: Config) -> list[Hit]:
         parts = line.split()
         if len(parts) != 4:
             continue
-        _, lsha, _, rsha = parts
+        lref, lsha, _, rsha = parts
         if set(lsha) == {"0"}:  # branch deletion
             continue
+        if git("cat-file", "-t", lsha).strip() == "tag":  # annotated tag: its own who/when/message
+            hits += _scan_tag(lref, lsha, cfg)
         rev = [lsha, "--not", "--remotes"]
         if set(rsha) != {"0"} and subprocess.run(
                 ["git", "cat-file", "-e", rsha], capture_output=True).returncode == 0:
@@ -440,6 +442,23 @@ def scan_push(lines: list[str], cfg: Config) -> list[Hit]:
                     hits.append(Hit(where, None, f"timezone-not-utc ({role})", offset))
         # Content too: catches commits made with --no-verify or before Commit Guard was installed.
         hits += _scan_pushed_content(rev, cfg, seen_content)
+    return hits
+
+
+def _scan_tag(ref: str, sha: str, cfg: Config) -> list[Hit]:
+    """Annotated tags store a tagger (name, email, time) and a message, apart from commits."""
+    hits: list[Hit] = []
+    where = f"tag {ref.removeprefix('refs/tags/')}"
+    header, _, message = git("cat-file", "-p", sha).partition("\n\n")
+    for line in header.splitlines():
+        if line.startswith("tagger "):
+            who, _, when = line[7:].rpartition("> ")
+            hits += [Hit(where, None, f"{r} (tagger)", s) for r, s in scan_text(who + ">", cfg)]
+            offset = when.split()[-1] if when.split() else ""
+            if offset != "+0000":
+                hits.append(Hit(where, None, "timezone-not-utc (tagger)", offset))
+    for i, text in enumerate(message.split("-----BEGIN PGP SIGNATURE-----")[0].splitlines(), 1):
+        hits += [Hit(f"{where} message", i, r, s) for r, s in scan_text(text, cfg)]
     return hits
 
 

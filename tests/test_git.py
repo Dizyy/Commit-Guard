@@ -252,6 +252,36 @@ class GitRepoTest(unittest.TestCase):
         self.assertIn(".env (name/metadata)  blocked-file-name", r.stderr)
         self.assertIn("message:1  email  ja***", r.stderr)
 
+    def push_tag_env(self, **extra):
+        return {**self.env, "GIT_COMMITTER_NAME": "Test User", "GIT_COMMITTER_EMAIL": NOREPLY,
+                **extra}
+
+    def test_pre_push_checks_annotated_tag(self):
+        self.install()
+        self.make_remote()
+        self.commit_clean("a.py")
+        self.git("push", "-q", "origin", "main")
+        bad = self.push_tag_env(GIT_COMMITTER_NAME="Jane Testperson",  # commitguard:allow
+                                GIT_COMMITTER_EMAIL="jane@example.com",  # commitguard:allow
+                                GIT_COMMITTER_DATE="2026-01-01T12:00:00 +0530")
+        self.git("tag", "-a", "v0.1", "-m", "mail jane@example.com", env=bad)  # commitguard:allow
+        r = self.git("push", "origin", "v0.1", check=False)
+        self.assertNotEqual(r.returncode, 0)
+        for expected in ("tag v0.1 (name/metadata)  private-name (tagger)",
+                         "email (tagger)", "timezone-not-utc (tagger)  +0***",
+                         "tag v0.1 message:1  email  ja***"):
+            self.assertIn(expected, r.stderr)
+
+    def test_pre_push_allows_clean_tag(self):
+        self.install()
+        self.make_remote()
+        self.commit_clean("a.py")
+        self.git("push", "-q", "origin", "main")
+        self.git("tag", "-a", "v1.0", "-m", "first release", env=self.push_tag_env())
+        self.git("tag", "light")  # lightweight tag: no tagger, nothing extra to check
+        r = self.git("push", "-q", "origin", "v1.0", "light", check=False)
+        self.assertEqual(r.returncode, 0, r.stderr)
+
     def test_pre_push_skips_commits_already_on_remote(self):
         self.install()
         self.make_remote()
