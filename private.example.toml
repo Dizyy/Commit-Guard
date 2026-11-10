@@ -1,0 +1,13 @@
+# Commit Guard private patterns - EXAMPLE with fake values.
+# Copy to ~/.commitguard/private.toml (Windows: %USERPROFILE%\.commitguard\private.toml)
+# and put your real values there. NEVER commit the real file.
+# Each entry: plain text = literal match (case-insensitive), "re:..." = Python regex.
+names = ["Jane Testperson", "Testperson"]
+emails = ["jane@example.com"]  # commitguard:allow
+pc_names = ["JANE-LAPTOP"]
+home_ips = ["203.0.113.7"]  # commitguard:allow
+words = ["re:\\bzorblax\\b"]
+# Text that a rule matches but is fine to commit (same syntax):
+allow = ["re:@example\\.org$"]
+# true = 192.168.x.x addresses are allowed
+allow_private_ips = false
