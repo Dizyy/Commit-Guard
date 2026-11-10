@@ -1,4 +1,5 @@
-# Commit Guard private patterns - EXAMPLE with fake values.
+# Commit Guard private patterns - EXAMPLE with fake values. OPTIONAL: your name, account
+# email, username, PC name and country/language hints are auto-detected without this file.
 # Copy to ~/.commitguard/private.toml (Windows: %USERPROFILE%\.commitguard\private.toml)
 # and put your real values there. NEVER commit the real file.
 # Each entry: plain text = literal match (case-insensitive), "re:..." = Python regex.
@@ -11,3 +12,5 @@ words = ["re:\\bzorblax\\b"]
 allow = ["re:@example\\.org$"]
 # true = 192.168.x.x addresses are allowed
 allow_private_ips = false
+# false = turn off auto-detection of your identity from the OS
+auto_detect = true

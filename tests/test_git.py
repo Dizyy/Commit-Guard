@@ -21,7 +21,7 @@ class GitRepoTest(unittest.TestCase):
         self.repo.mkdir()
         self.cfg = self.tmp / "private.toml"
         self.cfg.write_text(FAKE_CONFIG, encoding="utf-8")
-        self.env = {**os.environ, "COMMITGUARD_CONFIG": str(self.cfg),
+        self.env = {**os.environ, "COMMITGUARD_CONFIG": str(self.cfg), "COMMITGUARD_AUTO": "0",
                     "GIT_AUTHOR_DATE": UTC_DATE, "GIT_COMMITTER_DATE": UTC_DATE}
         self.git("init", "-q", "-b", "main")
         for k, v in [("user.name", "Test User"), ("user.email", NOREPLY),
@@ -87,13 +87,28 @@ class GitRepoTest(unittest.TestCase):
         self.assertEqual(r.returncode, 1)
         self.assertIn("README.md:1  private-name  Ja***", r.stderr)
 
-    def test_missing_config_warns_once_and_runs_builtins(self):
+    def test_missing_config_is_fine_and_silent(self):
         env = {**self.env, "COMMITGUARD_CONFIG": str(self.tmp / "missing.toml")}
         self.stage("a.py", "x = 1\n")
         r = self.cg("scan", env=env)
-        self.assertEqual(r.returncode, 0)
-        self.assertEqual(len(r.stderr.strip().splitlines()), 1)
-        self.assertIn("warning", r.stderr)
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+        self.stage("b.py", "mail = 'jane@example.com'\n")  # commitguard:allow
+        self.assertEqual(self.cg("scan", env=env).returncode, 1)  # built-ins still run
+
+    def test_auto_detect_blocks_real_username_without_config(self):
+        # Uses this machine's real username at runtime only; it is never written to a file
+        # in the repo and the assertion messages never print it.
+        import getpass
+        user = getpass.getuser()
+        if len(user) < 3 or user.lower() in ("user", "admin", "administrator", "owner"):
+            self.skipTest("generic username")
+        env = {**self.env, "COMMITGUARD_CONFIG": str(self.tmp / "missing.toml"),
+               "COMMITGUARD_AUTO": "1"}
+        self.stage("a.txt", f"made by {user} today\n")
+        r = self.cg("scan", env=env)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("auto-username", r.stderr)
+        self.assertNotIn(user, r.stderr.replace(user[:2] + "***", ""))
 
     def test_broken_config_fails_closed(self):
         self.cfg.write_text("names = [unclosed", encoding="utf-8")

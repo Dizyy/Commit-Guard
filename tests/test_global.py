@@ -22,7 +22,7 @@ class GlobalInstallTest(unittest.TestCase):
         cfg.parent.mkdir()
         cfg.write_text('names = ["Jane Testperson"]\n')  # commitguard:allow
         self.hooks_dir = cfg.parent / "hooks"
-        self.env = {**os.environ, "COMMITGUARD_CONFIG": str(cfg),
+        self.env = {**os.environ, "COMMITGUARD_CONFIG": str(cfg), "COMMITGUARD_AUTO": "0",
                     "GIT_CONFIG_GLOBAL": str(self.gitconfig), "GIT_CONFIG_NOSYSTEM": "1",
                     "GIT_AUTHOR_DATE": UTC_DATE, "GIT_COMMITTER_DATE": UTC_DATE}
         self.repo = self.new_repo("repo")

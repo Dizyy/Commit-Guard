@@ -11,7 +11,8 @@ Usage:
   python commitguard.py scan          scan staged changes (what the pre-commit hook runs)
   python commitguard.py test-config   show which private patterns loaded (masked)
 
-Private patterns live in ~/.commitguard/private.toml (never in a repo).
+Your name, account email, username, PC name and country/language hints are detected
+from the OS on every run (memory only). Optional extras: ~/.commitguard/private.toml.
 Standard library only. Python 3.11+.
 """
 from __future__ import annotations
@@ -38,7 +39,8 @@ BLOCKED_NAMES = {".env", "id_rsa", "handoff.md", "private.toml"}
 BLOCKED_SUFFIXES = (".pem", ".key")
 
 TEMPLATE = """\
-# Commit Guard private patterns. NEVER commit this file.
+# Commit Guard private patterns (OPTIONAL extras). NEVER commit this file.
+# Your name, account email, username, PC name and country/language hints are auto-detected.
 # Each entry: plain text = literal match (case-insensitive), "re:..." = Python regex.
 names = []
 emails = []
@@ -49,6 +51,8 @@ words = []
 allow = []
 # true = 192.168.x.x addresses are allowed
 allow_private_ips = false
+# false = turn off auto-detection of your identity from the OS
+auto_detect = true
 """
 
 
@@ -116,31 +120,189 @@ def _compile(entry: str) -> re.Pattern:
     return re.compile(re.escape(entry), re.I)
 
 
-def load_config(path: Path | None = None, warn: bool = True) -> Config:
+def load_config(path: Path | None = None, auto: bool | None = None) -> Config:
+    """Private config file is optional. Auto-detected identity rules are added unless
+    disabled (auto=False, env COMMITGUARD_AUTO=0, or auto_detect = false in the file)."""
     path = path or config_path()
     cfg = Config(path=path)
-    if not path.is_file():
-        if warn:
-            print(f"commitguard: warning: no private config at {path}, built-in rules only",
-                  file=sys.stderr)
-        return cfg
-    try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
-        for key, rule_name in PRIVATE_KEYS.items():
-            for entry in data.get(key, []):
+    data: dict = {}
+    if path.is_file():
+        try:
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+            for key, rule_name in PRIVATE_KEYS.items():
+                for entry in data.get(key, []):
+                    if entry:
+                        cfg.rules.append(Rule(rule_name, _compile(str(entry)), src=str(entry)))
+            for entry in data.get("allow", []):
                 if entry:
-                    cfg.rules.append(Rule(rule_name, _compile(str(entry)), src=str(entry)))
-        for entry in data.get("allow", []):
-            if entry:
-                cfg.allow.append(_compile(str(entry)))
-                cfg.allow_src.append(str(entry))
-        cfg.allow_private_ips = bool(data.get("allow_private_ips", False))
-    except (tomllib.TOMLDecodeError, re.error, OSError, TypeError) as e:
-        # Fail closed: a broken config must not silently let data through.
-        print(f"commitguard: error: cannot read {path}: {e}", file=sys.stderr)
-        sys.exit(1)
-    cfg.loaded = True
+                    cfg.allow.append(_compile(str(entry)))
+                    cfg.allow_src.append(str(entry))
+            cfg.allow_private_ips = bool(data.get("allow_private_ips", False))
+        except (tomllib.TOMLDecodeError, re.error, OSError, TypeError) as e:
+            # Fail closed: a broken config must not silently let data through.
+            print(f"commitguard: error: cannot read {path}: {e}", file=sys.stderr)
+            sys.exit(1)
+        cfg.loaded = True
+    if auto is None:
+        auto = os.environ.get("COMMITGUARD_AUTO") != "0" and data.get("auto_detect", True)
+    if auto:
+        cfg.rules += auto_rules(detect_identity())
     return cfg
+
+
+# ---------------------------------------------------------------- auto-detection
+# Reads who you are from the OS on every run. Values live in memory only: never written
+# to disk, never printed unmasked.
+
+GENERIC_USERS = {"user", "admin", "administrator", "owner", "root", "guest", "pc", "home",
+                 "dev", "default", "test", "ubuntu", "vagrant", "runner"}
+# Letters that mostly show up in one language family = language/country hint.
+# Written as \u escapes so this file itself contains no such letters.
+LANG_LETTERS = {"sv": "\u00e5\u00e4\u00f6", "fi": "\u00e4\u00f6",
+                "de": "\u00e4\u00f6\u00fc\u00df", "da": "\u00e6\u00f8\u00e5",
+                "nb": "\u00e6\u00f8\u00e5", "nn": "\u00e6\u00f8\u00e5",
+                "no": "\u00e6\u00f8\u00e5", "is": "\u00fe\u00f0\u00e6",
+                "pl": "\u0105\u0119\u0142\u0144\u015b\u017a\u017c",
+                "cs": "\u011b\u0161\u010d\u0159\u017e\u016f\u0148",
+                "tr": "\u011f\u0131\u015f", "hu": "\u0151\u0171", "ro": "\u0103\u0219\u021b",
+                "lt": "\u0105\u010d\u0119\u0117\u012f\u0161\u0173\u016b\u017e",
+                "lv": "\u0101\u010d\u0113\u0123\u012b\u0137\u013c\u0146\u0161\u016b\u017e"}
+
+
+def _empty_identity() -> dict[str, list[str]]:
+    return {k: [] for k in ("names", "emails", "users", "hosts", "words", "regions", "langs")}
+
+
+def _word(s: str) -> re.Pattern:
+    return re.compile(r"(?<![A-Za-z0-9])" + re.escape(s) + r"(?![A-Za-z0-9])", re.I)
+
+
+def auto_rules(ident: dict[str, list[str]]) -> list[Rule]:
+    """Turn detected identity values into rules (pure function, testable with fake data)."""
+    rules: list[Rule] = []
+
+    def add(name: str, rx: re.Pattern, src: str) -> None:
+        if all(r.rx.pattern != rx.pattern for r in rules):
+            rules.append(Rule(name, rx, src="auto:" + src))
+
+    for n in ident.get("names", []):
+        n = n.strip()
+        if len(n) >= 3:
+            add("auto-name", _word(n), n)
+            for part in n.split():
+                if len(part) >= 4:
+                    add("auto-name", _word(part), part)
+    for e in ident.get("emails", []):
+        if "@" in e and not e.lower().endswith("@users.noreply.github.com"):
+            add("auto-email", re.compile(re.escape(e.strip()), re.I), e.strip())
+    for u in ident.get("users", []):
+        if len(u) >= 3 and u.lower() not in GENERIC_USERS:
+            add("auto-username", _word(u), u)
+    for h in ident.get("hosts", []):
+        if len(h) >= 3 and h.lower() not in ("localhost", "localhost.localdomain"):
+            add("auto-pc-name", _word(h), h)
+    for w in ident.get("words", []):
+        if len(w) >= 3:
+            add("auto-country-hint", _word(w), w)
+    for r in ident.get("regions", []):
+        if re.fullmatch(r"[A-Z]{2}", r):  # locale tags like xx-YY / xx_YY
+            add("auto-country-hint", re.compile(rf"(?<![A-Za-z])[a-z]{{2}}[-_]{r}(?![A-Za-z])"),
+                f"xx-{r}")
+    letters = "".join(sorted({c for lang in ident.get("langs", [])
+                              for c in LANG_LETTERS.get(lang, "")}))
+    if letters:  # upper() only where it stays one letter (German sharp s uppercases to "SS")
+        chars = {c for ch in letters for c in (ch, ch.upper()) if len(c) == 1}
+        add("auto-language-letter",
+            re.compile("[" + "".join(re.escape(c) for c in sorted(chars)) + "]"), letters)
+    return rules
+
+
+def detect_identity() -> dict[str, list[str]]:
+    ident = _empty_identity()
+    try:
+        import getpass
+        import socket
+        ident["users"].append(getpass.getuser())
+        ident["hosts"].append(socket.gethostname().split(".")[0])
+        if os.environ.get("COMPUTERNAME"):
+            ident["hosts"].append(os.environ["COMPUTERNAME"])
+    except Exception:
+        pass
+    try:
+        if sys.platform == "win32":
+            _detect_windows(ident)
+        else:
+            _detect_posix(ident)
+    except Exception:  # detection is best effort; built-in rules still run
+        pass
+    return ident
+
+
+def _detect_posix(ident: dict[str, list[str]]) -> None:
+    import locale
+    import pwd
+    gecos = pwd.getpwuid(os.getuid()).pw_gecos.split(",")[0]
+    if gecos:
+        ident["names"].append(gecos)
+    tag = (locale.getlocale()[0] or os.environ.get("LANG", "")).split(".")[0]
+    if "_" in tag:
+        lang, region = tag.split("_", 1)
+        ident["regions"].append(region)
+        if lang != "en":
+            ident["langs"].append(lang)
+
+
+def _detect_windows(ident: dict[str, list[str]]) -> None:
+    import ctypes
+    from ctypes import wintypes
+    user = ident["users"][0] if ident["users"] else os.environ.get("USERNAME", "")
+
+    netapi = ctypes.WinDLL("netapi32")
+    netapi.NetUserGetInfo.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD,
+                                      ctypes.POINTER(ctypes.c_void_p)]
+    for level, idx, key in ((10, 3, "names"), (24, 2, "emails")):
+        # USER_INFO_10.full_name; USER_INFO_24.internet_principal_name (Microsoft account)
+        buf = ctypes.c_void_p()
+        if netapi.NetUserGetInfo(None, user, level, ctypes.byref(buf)) == 0 and buf.value:
+            val = ctypes.cast(buf, ctypes.POINTER(ctypes.c_wchar_p))[idx]
+            if val:
+                ident[key].append(val)
+            netapi.NetApiBufferFree(buf)
+
+    secur = ctypes.WinDLL("secur32")
+    b = ctypes.create_unicode_buffer(256)
+    n = wintypes.ULONG(256)
+    if secur.GetUserNameExW(3, b, ctypes.byref(n)) and b.value:  # NameDisplay
+        ident["names"].append(b.value)
+
+    k32 = ctypes.WinDLL("kernel32")
+
+    def info(tag: str, lctype: int) -> str:
+        out = ctypes.create_unicode_buffer(100)
+        return out.value if k32.GetLocaleInfoEx(tag, lctype, out, 100) else ""
+
+    b = ctypes.create_unicode_buffer(85)
+    k32.GetUserDefaultLocaleName(b, 85)
+    default = b.value  # e.g. xx-YY: YY = region = where you are
+    region = default.split("-")[-1] if "-" in default else ""
+    langs = {default.split("-")[0]}
+    user32 = ctypes.WinDLL("user32")
+    count = user32.GetKeyboardLayoutList(0, None)
+    if count > 0:
+        arr = (ctypes.c_void_p * count)()
+        user32.GetKeyboardLayoutList(count, arr)
+        for hkl in arr:
+            k32.LCIDToLocaleName((hkl or 0) & 0xFFFF, b, 85, 0)
+            if b.value:
+                langs.add(b.value.split("-")[0])
+    if region:
+        ident["regions"].append(region)
+        ident["words"] += [info(default, 0x1002), info(default, 0x8)]  # country, EN + native
+    for lang in sorted(langs - {"en", ""}):
+        ident["langs"].append(lang)
+        tag = f"{lang}-{region}" if region else lang
+        ident["words"] += [info(tag, 0x1001), info(tag, 0x4), info(tag, 0x8)]
+    ident["words"] = [w for w in dict.fromkeys(ident["words"]) if w]
 
 
 # ---------------------------------------------------------------- scanning
@@ -366,12 +528,11 @@ def cmd_uninstall_global() -> int:
 
 def cmd_test_config() -> int:
     cfg = load_config()
-    if not cfg.loaded:
-        return 0
-    print(f"config: {cfg.path}")
+    print(f"config file: {cfg.path} ({'loaded' if cfg.loaded else 'not present, optional'})")
     for r in cfg.rules:
-        kind = "regex" if r.src.startswith("re:") else "literal"
-        print(f"  {r.name:16} {kind:7} {mask(r.src[3:] if kind == 'regex' else r.src)}")
+        kind = r.src.split(":", 1)[0] if r.src.startswith(("re:", "auto:")) else "literal"
+        val = r.src.split(":", 1)[1] if kind != "literal" else r.src
+        print(f"  {r.name:21} {kind:7} {mask(val)}")
     for a in cfg.allow_src:
         print(f"  {'allow':16} {'':7} {mask(a)}")
     print(f"  allow_private_ips = {str(cfg.allow_private_ips).lower()}")

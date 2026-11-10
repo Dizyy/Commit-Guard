@@ -108,7 +108,7 @@ def fake_config() -> cg.Config:
     d = tempfile.mkdtemp()
     p = Path(d) / "private.toml"
     p.write_text(FAKE_CONFIG, encoding="utf-8")
-    return cg.load_config(p)
+    return cg.load_config(p, auto=False)
 
 
 class RuleTests(unittest.TestCase):
@@ -158,7 +158,7 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(cg.mask("jane@example.com"), "ja***")  # commitguard:allow
 
     def test_missing_config_runs_builtins(self):
-        cfg = cg.load_config(Path(tempfile.mkdtemp()) / "nope.toml", warn=False)
+        cfg = cg.load_config(Path(tempfile.mkdtemp()) / "nope.toml", auto=False)
         self.assertFalse(cfg.loaded)
         self.assertIn("email", self.rules_hit("a jane@example.com", cfg))  # commitguard:allow
         self.assertEqual(self.rules_hit("Jane Testperson", cfg), set())  # commitguard:allow
@@ -174,6 +174,66 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(list(cg.added_lines(diff)), [
             ("a.py", 4, "line four"), ("a.py", 5, "++ looks like header"),
             ("a.py", 12, "line twelve")])
+
+
+FAKE_IDENTITY = {
+    "names": ["Jane Q Testperson"],  # commitguard:allow
+    "emails": ["jane.account@example.com", "1+jt@users.noreply.github.com"],  # commitguard:allow
+    "users": ["jtestp", "admin"],  # commitguard:allow
+    "hosts": ["JANE-DESKTOP", "localhost"],  # commitguard:allow
+    "words": ["Testlandia", "Testish"],  # commitguard:allow
+    "regions": ["ZZ"],
+    "langs": ["de", "en"],
+}
+
+# (expected auto rule, line). Non-ASCII letters written as escapes on purpose.
+AUTO_POSITIVE = [
+    ("auto-name", "# Copyright Jane Q Testperson"),  # commitguard:allow
+    ("auto-name", "maintainer: testperson"),  # commitguard:allow
+    ("auto-email", "send to Jane.Account@example.com"),  # commitguard:allow
+    ("auto-username", "home is /home/jtestp/code"),  # commitguard:allow
+    ("auto-pc-name", "built on jane-desktop"),  # commitguard:allow
+    ("auto-country-hint", "Shipping to Testlandia only"),  # commitguard:allow
+    ("auto-country-hint", "translated to testish"),  # commitguard:allow
+    ("auto-country-hint", "LOCALE = 'de-ZZ'"),  # commitguard:allow
+    ("auto-language-letter", "print('Gr\u00fc\u00dfe')"),
+]
+
+
+class AutoDetectTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.cfg = cg.Config(path=Path("none"), rules=cg.auto_rules(FAKE_IDENTITY))
+
+    def rules_hit(self, line):
+        return {r for r, _ in cg.scan_text(line, self.cfg)}
+
+    def test_every_auto_positive_detected(self):
+        missed = [(r, l) for r, l in AUTO_POSITIVE if r not in self.rules_hit(l)]
+        self.assertEqual(missed, [])
+
+    def test_covers_every_auto_rule(self):
+        self.assertEqual({r.name for r in self.cfg.rules} - {r for r, _ in AUTO_POSITIVE}, set())
+
+    def test_generic_and_safe_values_skipped(self):
+        for line in ("sudo admin panel", "http://localhost:3000",
+                     "1+jt@users.noreply.github.com", "Q", "jtestpx",  # commitguard:allow
+                     "English docs"):
+            self.assertEqual(self.rules_hit(line) - {"email"}, set(), line)
+
+    def test_clean_corpus_with_fake_identity(self):
+        fps = [l for l in CLEAN.strip().splitlines() if self.rules_hit(l)]
+        self.assertEqual(fps, [])
+
+    def test_clean_corpus_with_this_machines_identity(self):
+        # Real values stay in memory; on failure only the clean corpus line is shown.
+        cfg = cg.Config(path=Path("none"), rules=cg.auto_rules(cg.detect_identity()))
+        fps = [l for l in CLEAN.strip().splitlines() if cg.scan_text(l, cfg)]
+        self.assertEqual(fps, [])
+
+    def test_detect_identity_never_crashes(self):
+        ident = cg.detect_identity()
+        self.assertEqual(set(ident), set(cg._empty_identity()))
 
 
 if __name__ == "__main__":
