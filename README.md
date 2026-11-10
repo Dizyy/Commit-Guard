@@ -106,3 +106,7 @@ python -m unittest discover -s tests -v
 
 Tests use fake data only and never touch your real git config (`GIT_CONFIG_GLOBAL` points to
 a temp file).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
