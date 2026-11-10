@@ -7,7 +7,8 @@
 ### git commit, \*\*\*
 
 **Your git history is forever.** One push can publish your real name, your home folder, an API key,<br>
-or the timezone that tells the world where you live. Commit Guard stops it before it leaves your PC.<br>
+or the timezone that tells the world where you live. Commit Guard checks every commit and every push,<br>
+and stops the leak before it leaves your PC.<br>
 **One command guards every repo. Nothing to configure: it knows who you are.**
 
 <br>

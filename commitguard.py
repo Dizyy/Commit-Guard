@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterator
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 ALLOW_MARKER = "commitguard:allow"
 HOOK_TAG = "# installed by commitguard"
 PRIVATE_KEYS = {  # config key -> rule name
