@@ -200,6 +200,63 @@ class GitRepoTest(unittest.TestCase):
         self.assertIn("email (author)", r.stderr)
         self.assertIn("private-name (author)", r.stderr)
 
+    # ---- commit messages
+
+    def test_commit_msg_hook_blocks_message(self):
+        self.install()
+        self.stage("a.py", "x = 1\n")
+        r = self.git("commit", "-m", "fix config", "-m", "thanks jane@example.com",  # commitguard:allow
+                     check=False)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("commit message:3  email  ja***", r.stderr)
+        self.assertNotIn("--amend", r.stderr)  # nothing is committed yet
+        r = self.git("commit", "-q", "-m", "fix config", check=False)
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_scan_message_ignores_comments_and_verbose_diff(self):
+        msg = self.tmp / "MSG"
+        msg.write_text("clean subject\n# jane@example.com\n"  # commitguard:allow
+                       "# ------------------------ >8 ------------------------\n"
+                       "+ jane@example.com\n", encoding="utf-8")  # commitguard:allow
+        sys.path.insert(0, str(Path(SCRIPT).parent))
+        import commitguard as cg
+        cfg = cg.load_config(self.cfg, auto=False)
+        self.assertEqual(cg.scan_message(str(msg), cfg), [])
+        msg.write_text("leak jane@example.com\n", encoding="utf-8")  # commitguard:allow
+        self.assertEqual([h.rule for h in cg.scan_message(str(msg), cfg)], ["email"])
+
+    # ---- pre-push content scan (commits that skipped the commit hooks)
+
+    def test_pre_push_scans_content_of_no_verify_commit(self):
+        self.install()
+        self.make_remote()
+        self.stage("k.py", "KEY = 'AKIAIOSFODNN7EXAMPLE'\n")  # commitguard:allow
+        self.git("commit", "-q", "--no-verify", "-m", "sneaky")
+        r = self.git("push", "origin", "main", check=False)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("k.py:1  aws-access-key  AK***", r.stderr)
+        self.assertIn("git commit --amend", r.stderr)
+
+    def test_pre_push_scans_messages_and_file_names(self):
+        self.install()
+        self.make_remote()
+        self.stage(".env", "X=1\n")
+        self.git("commit", "-q", "--no-verify", "-m", "mail jane@example.com")  # commitguard:allow
+        r = self.git("push", "origin", "main", check=False)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn(".env (name/metadata)  blocked-file-name", r.stderr)
+        self.assertIn("message:1  email  ja***", r.stderr)
+
+    def test_pre_push_skips_commits_already_on_remote(self):
+        self.install()
+        self.make_remote()
+        self.stage("k.py", "KEY = 'AKIAIOSFODNN7EXAMPLE'\n")  # commitguard:allow
+        self.git("commit", "-q", "--no-verify", "-m", "old")
+        self.git("push", "-q", "--no-verify", "origin", "main")  # already public: not our job now
+        self.commit_clean("b.py")
+        r = self.git("push", "-q", "origin", "main", check=False)
+        self.assertEqual(r.returncode, 0, r.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

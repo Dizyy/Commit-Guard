@@ -106,9 +106,12 @@ Only one repo instead: run `python path/to/commitguard.py install` inside it.
 
 ## What it checks
 
-**On commit**: only the lines you add (`git diff --cached -U0`) plus the names of staged files.<br>
-**On push**: author and committer name + email of every commit being pushed, and the timezone
-(anything other than `+0000` is blocked, because offsets reveal where you live).
+**On commit**: only the lines you add (`git diff --cached -U0`), the names of staged files, and
+the commit message.<br>
+**On push**: every commit that isn't on the remote yet: author and committer name + email, the
+timezone (anything other than `+0000` is blocked, because offsets reveal where you live), and
+again the added lines, file names and message. That catches commits made with `--no-verify` or
+before Commit Guard was installed.
 
 Built-in rules:
 
@@ -168,9 +171,9 @@ A broken config file blocks the commit (fail closed) instead of silently letting
 
 ## Limits
 
-- `git commit --no-verify` skips all hooks.
+- `git push --no-verify` skips all hooks. (`git commit --no-verify` is caught at push time.)
 - Repos that set their own local `core.hooksPath` (for example husky) are not covered by `--global`.
-- Commit messages are not scanned.
+- Commits already on the remote are not rescanned.
 - Auto-detection is tested on Windows. On macOS and Linux it reads the account name and locale (best effort).
 - Possible false positives: SSH remote URLs (the `git` user at a host looks like an email) and
   four-part version numbers (they look like IPs). Use `commitguard:allow` or an `allow` entry.

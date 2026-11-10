@@ -81,10 +81,19 @@ class GlobalInstallTest(unittest.TestCase):
         self.install()
         self.local_hook(self.repo, "pre-commit", 'echo ran > local-pre-commit.txt')
         self.local_hook(self.repo, "post-commit", 'echo ran > local-post-commit.txt')
+        self.local_hook(self.repo, "commit-msg", 'cp "$1" local-commit-msg.txt')
         self.write(self.repo, "a.py", "x = 1\n")
         self.run_git(self.repo, "commit", "-q", "-m", "ok")
         self.assertTrue((self.repo / "local-pre-commit.txt").exists())
         self.assertTrue((self.repo / "local-post-commit.txt").exists())
+        self.assertIn("ok", (self.repo / "local-commit-msg.txt").read_text())
+
+    def test_global_commit_msg_blocks(self):
+        self.install()
+        self.write(self.repo, "a.py", "x = 1\n")
+        r = self.run_git(self.repo, "commit", "-m", "by Jane Testperson", check=False)  # commitguard:allow
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("commit message:1  private-name", r.stderr)
 
     def test_failing_local_hook_still_blocks(self):
         self.install()

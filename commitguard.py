@@ -378,7 +378,7 @@ def scan_staged(cfg: Config) -> list[Hit]:
 
 def scan_push(lines: list[str], cfg: Config) -> list[Hit]:
     """pre-push: stdin lines are '<local ref> <local sha> <remote ref> <remote sha>'."""
-    hits, seen = [], set()
+    hits, seen, seen_content = [], set(), set()
     for line in lines:
         parts = line.split()
         if len(parts) != 4:
@@ -404,6 +404,56 @@ def scan_push(lines: list[str], cfg: Config) -> list[Hit]:
                 offset = date.split()[-1]
                 if offset != "+0000":
                     hits.append(Hit(where, None, f"timezone-not-utc ({role})", offset))
+        # Content too: catches commits made with --no-verify or before Commit Guard was installed.
+        hits += _scan_pushed_content(rev, cfg, seen_content)
+    return hits
+
+
+def _chunks(out: str) -> Iterator[tuple[str, str]]:
+    """Split `git log --format=%x00%H...` output into (sha, rest)."""
+    for chunk in out.split("\0")[1:]:
+        sha, _, rest = chunk.partition("\n")
+        yield sha.strip(), rest
+
+
+def _scan_pushed_content(rev: list[str], cfg: Config, seen: set[str]) -> list[Hit]:
+    hits: list[Hit] = []
+    new = set()
+    for sha, body in _chunks(git("log", "--format=%x00%H%n%B", *rev)):
+        if sha in seen:
+            continue
+        new.add(sha)
+        hits += [Hit(f"commit {sha[:10]} message", i, r, s)
+                 for i, text in enumerate(body.rstrip("\n").splitlines(), 1)
+                 for r, s in scan_text(text, cfg)]
+    for sha, names in _chunks(git("log", "--format=%x00%H", "--name-only",
+                                  "--diff-filter=ACMR", *rev)):
+        if sha in new:
+            for name in filter(None, names.splitlines()):
+                if is_blocked_name(name):
+                    hits.append(Hit(f"commit {sha[:10]} {name}", None, "blocked-file-name", name))
+                hits += [Hit(f"commit {sha[:10]} {name}", None, r, s)
+                         for r, s in scan_text(name, cfg)]
+    for sha, diff in _chunks(git("log", "--format=%x00%H", "-p", "-U0", "--no-color",
+                                 "--no-ext-diff", "--no-textconv", *rev)):
+        if sha in new:
+            hits += [Hit(f"commit {sha[:10]} {f}", ln, r, s)
+                     for f, ln, text in added_lines(diff) for r, s in scan_text(text, cfg)]
+    seen |= new
+    return hits
+
+
+def scan_message(path: str, cfg: Config) -> list[Hit]:
+    """commit-msg hook: scan the message git is about to commit (comments and the
+    `git commit -v` diff below the scissors line are ignored)."""
+    hits = []
+    text = Path(path).read_text(encoding="utf-8", errors="replace")
+    for i, line in enumerate(text.splitlines(), 1):
+        if line.startswith("# ------------------------ >8"):
+            break
+        if line.startswith("#"):
+            continue
+        hits += [Hit("commit message", i, r, s) for r, s in scan_text(line, cfg)]
     return hits
 
 
@@ -415,6 +465,9 @@ def report(hits: list[Hit]) -> int:
         loc = f"{h.where}:{h.line}" if h.line is not None else f"{h.where} (name/metadata)"
         print(f"  {loc}  {h.rule}  {mask(h.text)}", file=sys.stderr)
     print(f"Fix it, or add '{ALLOW_MARKER}' to a line that is safe.", file=sys.stderr)
+    if any(h.where.startswith("commit ") and h.where != "commit message" for h in hits):
+        print("Already committed: fix the last commit with 'git commit --amend',"
+              " older ones with 'git rebase -i'.", file=sys.stderr)
     return 1
 
 
@@ -432,7 +485,8 @@ def cmd_install() -> int:
     py =Path(sys.executable).as_posix()
     me = Path(__file__).resolve().as_posix()
     hooks.mkdir(parents=True, exist_ok=True)
-    plan = {"pre-commit": "hook-pre-commit", "pre-push": 'hook-pre-push "$@"'}
+    plan = {"pre-commit": "hook-pre-commit", "commit-msg": 'hook-commit-msg "$1"',
+            "pre-push": 'hook-pre-push "$@"'}
     for name in plan:
         f = hooks / name
         if f.exists() and HOOK_TAG not in f.read_text(encoding="utf-8", errors="replace"):
@@ -475,6 +529,9 @@ def global_hook_script(name: str, py: str, me: str) -> str:
              f'if [ -x "$cg_local" ] && ! grep -q "{HOOK_TAG}" "$cg_local"; then\n')
     if name == "pre-commit":
         return (head + f'"{py}" "{me}" hook-pre-commit || exit 1\n'
+                + chain + '  exec "$cg_local" "$@"\nfi\nexit 0\n')
+    if name == "commit-msg":
+        return (head + f'"{py}" "{me}" hook-commit-msg "$1" || exit 1\n'
                 + chain + '  exec "$cg_local" "$@"\nfi\nexit 0\n')
     if name == "pre-push":  # stdin (the ref list) must reach both commitguard and the local hook
         return (head + 'cg_in="$(cat)"\n'
@@ -553,6 +610,8 @@ def main(argv: list[str]) -> int:
             return cmd_test_config()
         if cmd in ("scan", "hook-pre-commit"):
             return report(scan_staged(load_config()))
+        if cmd == "hook-commit-msg" and len(argv) > 1:
+            return report(scan_message(argv[1], load_config()))
         if cmd == "hook-pre-push":
             return report(scan_push(sys.stdin.read().splitlines(), load_config()))
     except RuntimeError as e:
